@@ -1,0 +1,10 @@
+changes in 1.3
+
+1 - tuned autopilot
+2 - changed flight controls
+3 - minor fixes in flight dynamics
+4 - fixed fuel logic. now engines will not shut down just after power off or pumps fail.
+5 - when cabin is presuriased, windows and side door will not open
+6 - added KLN enabler. you have to just place KLN files into Custom Avionics folder to add it.
+7 - changed lights for XP10
+8 - engines tuned for XP10

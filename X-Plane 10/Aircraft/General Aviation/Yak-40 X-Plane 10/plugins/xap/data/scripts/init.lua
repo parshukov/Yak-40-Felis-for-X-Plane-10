@@ -1,0 +1,1165 @@
+-- list of path to search components
+searchPath = { ".", "" }
+
+-- list of path to search images
+searchImagePath = { ".", "" }
+
+-- show areas on which clicking is possible
+showClickableAreas = false
+
+-- returns true if argument is property
+function isProperty(value)
+    return ("table" == type(value)) and (1 == value.__property)
+end
+
+
+-- create new property table
+function createProperty(value)
+    if isProperty(value) then
+        return value
+    end
+
+    local prop = { __property = 1 }
+    if "function" == type(value) then
+        prop.get = value
+    else
+        prop.value = value
+    end
+    return prop
+end
+
+
+-- default mouse click handler
+function defaultOnMouseClick(comp, x, y, button, parentX, parentY)
+    if (1 == button) and get(comp.movable) and (1 == comp.dragging) then
+        local position = get(comp.position)
+        comp.dragStartX = parentX
+        comp.dragStartY = parentY
+        comp.dragStartPosX = position[1]
+        comp.dragStartPosY = position[2]
+        comp.dragging = 2
+        return true
+    end
+    return false
+end
+
+-- default mouse down handler
+function defaultOnMouseDown(comp, x, y, button, parentX, parentY)
+    if (1 == button) and get(comp.resizeble) and 
+                isInRect(comp.resizeRect, x, y) 
+    then
+        local pos = get(comp.position)
+        comp.resizing = true;
+        comp.dragStartX = parentX
+        comp.dragStartY = parentY
+        comp.dragStartPosX = pos[1]
+        comp.dragStartPosY = pos[2]
+        comp.dragStartSizeX = pos[3]
+        comp.dragStartSizeY = pos[4]
+        return true
+    end
+
+    if (1 == button) and get(comp.movable) then
+        comp.dragging = 1
+        return true
+    end
+    return false
+end
+
+
+-- default mouse up handler
+function defaultOnMouseUp(comp, x, y, button, parentX, parentY)
+    if 1 == button and (get(comp.movable) or get(comp.resizeble)) then
+        if comp.dragging then
+            comp.dragging = 0
+        end
+        if comp.resizing then
+            comp.resizing = false
+        end
+        return true
+    end
+    return false
+end
+
+
+-- default mouse move handler
+function defaultOnMouseMove(comp, x, y, button, parentX, parentY)
+    if (rawget(comp, "resizing")) then
+        local pos = get(comp.position)
+        local newSizeX = comp.dragStartSizeX + (parentX - comp.dragStartX)
+        local newSizeY = comp.dragStartSizeY - (parentY - comp.dragStartY)
+        pos[2] = comp.dragStartY - (newSizeY - comp.dragStartSizeY)
+        pos[3] = newSizeX
+        pos[4] = newSizeY
+        set(comp.position, pos)
+        return true
+    end
+
+    if (2 == rawget(comp, "dragging")) and get(comp.movable) then
+        local position = get(comp.position)
+        position[1] = comp.dragStartPosX + (parentX - comp.dragStartX)
+        position[2] = comp.dragStartPosY + (parentY - comp.dragStartY)
+        set(comp.position, position)
+        return true
+    else
+        return false
+    end
+end
+
+-- default key down handler
+function defaultOnKeyDown(comp, char, key)
+    return false
+end
+
+-- default key up handler
+function defaultOnKeyUp(comp, char, key)
+    return false
+end
+
+
+-- create basic component
+function createComponent(name, parent)
+    local data = { 
+        components = { },
+        componentsByName = { },
+        size = { 100, 100 },
+        position = createProperty { 0, 0, 100, 100 },
+        draw = function (comp) drawAll(comp.components); end,
+        update = function (comp) updateAll(comp.components); end,
+        name = name,
+        visible = createProperty(true),
+        movable = createProperty(false),
+        resizeble = createProperty(false),
+        focused = createProperty(false),
+        onMouseUp = defaultOnMouseUp,
+        onMouseDown = defaultOnMouseDown,
+        onMouseClick = defaultOnMouseClick,
+        onMouseMove = defaultOnMouseMove,
+        onKeyDown = defaultOnKeyDown,
+        onKeyUp = defaultOnKeyUp,
+    }
+    data._C = data
+    if parent then
+        data._P = parent
+    end
+    addComponentFunc(data)
+    return data
+end
+
+
+-- create component function
+function addComponentFunc(component)
+    component.component = function(name, tbl)
+        if not tbl then -- anonymous subcomponent
+            tbl = name
+            name = nil
+        end
+        table.insert(component.components, tbl)
+        if name then
+            component.componentsByName[name] = tbl
+        end
+        return tbl
+    end
+end
+
+
+-- add component to popup layer
+function popup(name, tbl)
+    return popups.component(name, tbl)
+end
+
+
+-- main panel
+panel = createComponent("panel")
+
+-- popups layer
+popups = createComponent("popups", panel)
+
+
+-- returns simulator double property
+function globalPropertyd(name, default)
+    local ref = findProp(name, "double")
+    return {
+        __property = 1;
+        get = function() return getPropd(ref, default); end;
+        set = function(self, value) setPropd(ref, value); end;
+    }
+end
+
+-- create new double property and set default value
+function createGlobalPropertyd(name, default)
+    local ref = createProp(name, 'double', default)
+    return globalPropertyd(name, default)
+end
+
+-- create new global functional double property
+function createFuncPropertyd(name, getter, setter)
+    local ref = createFuncProp(name, 'double', getter, setter)
+    return globalPropertyd(name)
+end
+
+
+-- returns simulator float property
+function globalPropertyf(name, default)
+    local ref = findProp(name, "float")
+    return {
+        __property = 1;
+        get = function() return getPropf(ref, default); end;
+        set = function(self, value) setPropf(ref, value); end;
+    }
+end
+
+-- create new float property and set default value
+function createGlobalPropertyf(name, default)
+    local ref = createProp(name, 'float', default)
+    return globalPropertyf(name, default)
+end
+
+-- create new global functional float property
+function createFuncPropertyf(name, getter, setter)
+    local ref = createFuncProp(name, 'float', getter, setter)
+    return globalPropertyf(name)
+end
+
+
+-- returns simulator int property
+function globalPropertyi(name, default)
+    local ref = findProp(name, "int")
+    return {
+        __property = 1;
+        get = function(doNotCall) return getPropi(ref, default); end;
+        set = function(self, value) setPropi(ref, value); end;
+    }
+end
+
+-- create new float property and set default value
+function createGlobalPropertyi(name, default)
+    local ref = createProp(name, 'int', default)
+    return globalPropertyi(name, default)
+end
+
+-- create new global functional int property
+function createFuncPropertyi(name, getter, setter)
+    local ref = createFuncProp(name, 'int', getter, setter)
+    return globalPropertyi(name)
+end
+
+-- returns simulator string property
+function globalPropertys(name, default)
+    local ref = findProp(name, "string")
+    return {
+        __property = 1;
+        get = function(doNotCall) return getProps(ref, default); end;
+        set = function(self, value) setProps(ref, value); end;
+    }
+end
+
+-- create new string property and set default value
+function createGlobalPropertys(name, maxLen, default)
+    local ref = createProp(name, 'string', maxLen, default)
+    return globalPropertys(name, default)
+end
+
+-- create new global functional string property
+function createFuncPropertys(name, getter, setter, maxSize)
+    local ref = createFuncProp(name, 'string', getter, setter, maxSize)
+    return globalPropertys(name)
+end
+
+
+-- returns value of property
+-- traverse recursive properties
+function get(property, doNotCall)
+    if isProperty(property) then
+        if property.get then
+            return property:get(doNotCall)
+        else
+            if isProperty(property.value) then
+                return get(property.value, doNotCall)
+            else
+                return property.value
+            end
+        end
+    else
+        if (not doNotCall) and ("function" == type(property)) then
+            return property()
+        else
+            return property
+        end
+    end
+end
+
+
+-- set value of property
+function set(property, value)
+    if property.set then
+        property:set(value)
+    else
+        if isProperty(property.value) then
+            set(property.value, value)
+        else
+            property.value = value
+        end
+    end
+end
+
+
+-- deep copies values from source table to destination table
+function mergeTables(dest, src)
+    for k, v in pairs(src) do
+        if "table" == type(v) then
+            if not dest[k] then
+                --dest[k] = { }
+                dest[k] = v
+            else
+                mergeTables(dest[k], v)
+            end
+        else
+            dest[k] = v
+        end
+    end
+end
+
+
+-- convert values from table to properties
+function argumentsToProperties(arguments)
+    local res = { }
+    for k, v in pairs(arguments) do
+        if "function" == type(v) then
+            res[k] = v
+        else
+            if isProperty(v) then
+                res[k] = v
+            else
+                res[k] = createProperty(v)
+            end
+        end
+    end
+    return res
+end
+
+-- update component
+function updateComponent(v)
+    if v and v.update then
+        v:update()
+    end
+end
+
+-- update all components from table
+function updateAll(table)
+    for _, v in pairs(table) do
+        updateComponent(v)
+    end
+end
+
+-- draw component
+function drawComponent(v)
+    if v and get(v.visible) then
+        saveGraphicsContext()
+        local pos = get(v.position)
+        setTranslation(pos[1], pos[2], pos[3], pos[4], v.size[1], v.size[2])
+        v:draw()
+        restoreGraphicsContext()
+    end
+end
+
+
+-- draw all components from table
+function drawAll(table)
+    for _, v in pairs(table) do
+        drawComponent(v)
+    end
+end
+
+-- try to find key in local table first.
+-- look in global table if key doesn't exists in local table
+-- try to load component from file if it doesn't exists in global table
+function compIndex(table, key)
+    local comp = table
+    while nil ~= comp do
+        local v = rawget(comp, key)
+        if nil ~= v then 
+            return v 
+        else
+            comp = rawget(comp, '_P')
+        end
+    end
+
+    v = _G[key]
+    if nil == v then
+        return loadComponent(key)
+    else
+        return v
+    end
+end
+
+-- return true if file exists
+function isFileExists(fileName)
+    local f = io.open(fileName)
+    if nil == f then
+        return false
+    else
+        io.close(f)
+        return true
+    end
+end
+
+
+-- remove extension from file name
+function extractFileName(filePath)
+    for i = string.len(filePath), 1, -1 do
+        if string.sub(filePath, i, i) == '.' then
+            return string.sub(filePath, 1, i-1)
+        end
+    end
+    return filePath
+end
+
+
+-- try to find file on search paths
+function openFile(fileName)
+    local name = extractFileName(fileName)
+
+    for _, v in ipairs(searchPath) do
+        local fullName
+        local subdir
+        if 0 < string.len(v) then
+            fullName = v .. '/' .. fileName
+            subdir = v .. '/' .. name
+        else
+            fullName = fileName
+            subdir = name
+        end
+
+        -- check if it is available at current path
+        if isFileExists(fullName) then
+            local f, errorMsg = loadfile(fullName)
+            if f then
+                return f
+            else
+                print(errorMsg)
+            end
+        end
+
+        -- check subdir
+        local subFullName = subdir .. '/' .. fileName
+        if isFileExists(subFullName) then
+            local f, errorMsg = loadfile(subFullName)
+            if f then
+                return f, subdir
+            else
+                print(errorMsg)
+            end
+        end
+    end
+
+    print("component not found", fileName)
+    return nil
+end
+
+
+ -- make deep copy of table
+function cloneTable(table)
+    local newTable = {}
+    for k, v in pairs(table) do
+        if "table" == type(v) then
+            newTable[k] = cloneTable(v)
+        else
+            newTable[k] = v
+        end
+    end
+    return newTable
+end
+
+
+-- add properties to component
+function setupComponent(component, args)
+    mergeTables(component, argumentsToProperties(args))
+    setmetatable(component, { __index = compIndex })
+    
+    component.defineProperty = function(name, dflt)
+        if not rawget(component, name) then
+            component[name] = createProperty(dflt)
+        end
+    end
+
+    component.include = function(name)
+        include(component, name)
+    end
+
+    addComponentFunc(component)
+end
+
+local creatingComponents = { }
+
+
+-- call it before creation of components
+function startComponentsCreation(parent)
+    table.insert(creatingComponents, parent)
+end
+
+-- call it after creation of components
+function finishComponentsCreation()
+    table.remove(creatingComponents)
+end
+
+
+-- load component from file and create constructor
+function loadComponent(name, fileName)
+    print("loading", name)
+
+    if not fileName then
+        fileName = name .. ".lua"
+    end
+
+    local f, subdir = openFile(fileName)
+    if not f then
+        print("can't load component", name)
+        return nil
+    end
+
+    local constr = function(args)
+        local parent = creatingComponents[#creatingComponents]
+        if subdir then
+            addSearchPath(subdir)
+        end
+        local t = createComponent(name, parent)
+
+        -- ugly hack to solve popups parent problem
+        if ('panel' == name) and (nil == parent) then
+            popups._P = t
+        end
+
+        setupComponent(t, args)
+        startComponentsCreation(t)
+        setfenv(f, t)
+        f()
+        finishComponentsCreation()
+        if subdir then
+            popSearchPath()
+        end
+        return t
+    end
+
+    _G[name] = constr
+
+    return constr
+end
+
+
+function resizePanel(width, height)
+    set(panel.position, { 0, 0, width, height })
+end
+
+function resizePopup(width, height)
+    set(popups.position, { 0, 0, width, height })
+    popups.size[1] = width
+    popups.size[2] = height
+end
+
+
+-- load panel from file
+-- panel table will be stored in panel global variable
+function loadPanel(fileName, panelWidth, panelHeight, popupWidth, popupHeight)
+    popups = createComponent("popups")
+    popups.position = createProperty { 0, 0, popupWidth, popupHeight }
+    popups.size = { popupWidth, popupHeight }
+
+    local c = loadComponent("panel", fileName)
+    if not c then
+        print("Error loading panel", fileName)
+        return nil
+    end
+    panel = c({position = { 0, 0, panelWidth, panelHeight}})
+
+    return panel
+end
+
+
+-- add path to search path
+function addSearchPath(path)
+    table.insert(searchPath, 1, path)
+    table.insert(searchImagePath, 1, path)
+end
+
+
+function popSearchPath()
+    table.remove(searchPath, 1)
+    table.remove(searchImagePath, 1)
+end
+
+
+-- add path to images search path
+function addSearchImagePath(path)
+    table.insert(searchImagePath, 1, path)
+end
+
+
+-- cursor texture and position
+cursor = {
+    x = 0,
+    y = 0,
+    shape = nil
+}
+
+
+-- Draw panel on screen
+function drawPanelLayer()
+    drawComponent(panel)
+end
+
+
+-- draw popup panels
+function drawPopupsLayer()
+    drawComponent(popups)
+
+    if cursor.shape then
+        drawCursor()
+    end
+end
+
+
+-- draw panel and popups layers
+function drawPanel()
+    drawPanelLayer()
+    drawPopupsLayer()
+end
+
+-- update all component
+function update()
+    updateComponent(panel)
+    updateComponent(popups)
+end
+
+-- load texture image
+-- loads image and sets texture coords.  It can be called in forms of:
+-- loadImage(fileName) -- sets texture coords to entire texture
+-- loadImage(fileName, width, height) -- sets texture coords to show 
+--    center part of image.  width and height sets size of image part
+-- loadImage(fileName, x, y, width, height) - loads specified part of image
+function loadImage(fileName, x, y, width, height)
+    for _, v in ipairs(searchImagePath) do
+        local t = getGLTexture(v .. '/' .. fileName, x, y, width, height)
+        if t then
+            return t
+        end
+    end
+
+    local tex = getGLTexture(fileName, x, y, width, height)
+    if not tex then
+        print("Can't load texture", fileName)
+    end
+    return tex
+end
+
+
+-- load font
+function loadFont(fileName)
+    for _, v in ipairs(searchImagePath) do
+        local t = getGLFont(v .. '/' .. fileName)
+        if t then
+            return t
+        end
+    end
+
+    local font = getGLTexture(fileName)
+    if not font then
+        print("Can't load font", fileName)
+    end
+    return tex
+end
+
+
+-- check if coord lay inside rectangle.  rectangle is array of 
+-- { x, y, width, height }
+function isInRect(rect, x, y)
+    local x1 = rect[1]
+    local y1 = rect[2]
+    local x2 = x1 + rect[3]
+    local y2 = y1 + rect[4]
+    return (x1 <= x) and (x2 > x) and (y1 <= y) and (y2 > y)
+end
+
+-- run handler of component
+function runComponentHandler(component, name, mx, my, button, x, y)
+    local handler = rawget(component, name)
+    if handler then
+        return handler(component, mx, my, button, x, y)
+    else
+        return false
+    end
+end
+
+
+-- traverse components and finds best handler with specified name
+function runHandler(component, name, x, y, button, path)
+    local position = get(component.position)
+    local size = component.size
+    if (not (position and size)) then
+        return false
+    end
+    local mx = (x - position[1]) * size[1] / position[3]
+    local my = (y - position[2]) * size[2] / position[4]
+    for i = #component.components, 1, -1 do
+        local v = component.components[i]
+        if get(v.visible) and isInRect(get(v.position), mx, my) then
+            local res = runHandler(v, name, mx, my, button, path)
+            if res then
+                if path then
+                    table.insert(path, component)
+                end
+                return true
+            end
+        end
+    end
+    local res = runComponentHandler(component, name, mx, my, button, x, y)
+    if res then
+        if path then
+            table.insert(path, component)
+        end
+    end
+    return res
+end
+
+-- returns path to component under mouse
+function getFocusedPath(component, x, y, path)
+    table.insert(path, component)
+    local position = get(component.position)
+    local size = component.size
+    if (not (position and size)) then
+        return
+    end
+    local mx = (x - position[1]) * size[1] / position[3]
+    local my = (y - position[2]) * size[2] / position[4]
+    for i = #component.components, 1, -1 do
+        local v = component.components[i]
+        if get(v.visible) and isInRect(get(v.position), mx, my) then
+            getFocusedPath(v, mx, my, path)
+        end
+    end
+end
+
+
+-- returns path to component under mouse
+function getTopFocusedPath(layer, x, y)
+    local path = { }
+    if (1 == layer) or (3 == layer) then
+        getFocusedPath(popups, x, y, path)
+        if 1 < #path then
+            return path
+        end
+        path = { }
+    end
+    if (2 == layer) or (3 == layer) then
+        getFocusedPath(panel, x, y, path)
+    end
+    return path
+end
+
+
+-- run handler of pressed component
+function runPressedHandler(path, name, x, y, button)
+    local mx = x
+    local my = y
+    local px = x
+    local py = y
+    for i = #path, 1, -1 do
+        local c = path[i]
+        px = mx
+        py = my
+        local position = get(c.position)
+        local size = get(c.size)
+        mx = (mx - position[1]) * c.size[1] / position[3]
+        my = (my - position[2]) * c.size[2] / position[4]
+    end
+    return runComponentHandler(path[1], name, mx, my, button, px, py)
+end
+
+
+-- traverse components and finds best handler with specified name
+function runTopHandler(layer, name, x, y, button)
+    local path = { }
+    if (1 == layer) or (3 == layer) then
+        local res = runHandler(popups, name, x, y, button, path)
+        if res then
+            return true, path
+        end
+    end
+    if (2 == layer) or (3 == layer) then
+        return runHandler(panel, name, x, y, button, path), path
+    end
+end
+
+-- returns value of cursor property for specified layer
+function getTopCursorShape(layer, x, y)
+    if (1 == layer) or (3 == layer) then
+        local cursor = getCursorShape(popups, x, y)
+        if cursor then
+            return cursor
+        end
+    end
+    if (2 == layer) or (3 == layer) then
+        return getCursorShape(panel, x, y)
+    end
+end
+
+-- returns value of cursor property
+function getCursorShape(component, x, y)
+    local position = get(component.position)
+    local size = component.size
+    if (not (position and size)) then
+        return nil
+    end
+    local mx = (x - position[1]) * size[1] / position[3]
+    local my = (y - position[2]) * size[2] / position[4]
+    for i = #component.components, 1, -1 do
+        local v = component.components[i]
+        if get(v.visible) and isInRect(get(v.position), mx, my) then
+            local res = getCursorShape(v, mx, my)
+            if res then
+                return res
+            end
+        end
+    end
+    return rawget(component, "cursor")
+end
+
+-- set shape of cursor
+function setCursor(x, y, shape, layer)
+    if (2 ~= layer) then
+        cursor.x = x
+        cursor.y = y
+    end
+    cursor.shape = get(shape)
+end
+
+
+-- draw cursor shape
+function drawCursor()
+    if cursor.shape and cursor.shape.shape then
+        drawTexture(cursor.shape.shape, 
+                cursor.shape.x + cursor.x, cursor.y - cursor.shape.y,
+                cursor.shape.width, cursor.shape.height,
+                1, 1, 1, 1)
+    end
+end
+
+
+-- pressed button number
+local pressedButton = 0
+
+-- path to component after mouse press
+local pressedComponentPath = nil
+
+-- update pressed component path
+function setPressedPath(path)
+    pressedComponentPath = path
+end
+
+-- path to focused component
+local focusedComponentPath = nil
+
+-- update focused component path
+function setFocusedPath(path)
+    if path and (0 == #path) then
+        path = nil
+    end
+    if focusedComponentPath then
+        for _, c in pairs(focusedComponentPath) do
+            set(c.focused, false)
+        end
+    end
+    focusedComponentPath = path
+    if focusedComponentPath then
+        for _, c in ipairs(focusedComponentPath) do
+            set(c.focused, true)
+        end
+    end
+end
+
+-- Called when mouse button was pressed
+function onMouseDown(x, y, button, layer)
+    setFocusedPath(getTopFocusedPath(layer, x, y))
+    pressedButton = button
+    local handled, path = runTopHandler(layer, "onMouseDown", x, y, button)
+    if handled then
+        setPressedPath(path)
+        if (1 == layer) or (3 == layer) then
+            local comp = path[1]
+            for i, v in pairs(popups.components) do
+                if v == comp then
+                    table.remove(popups.components, i)
+                    table.insert(popups.components, comp)
+                    setPressedPath(nil)
+                    return handled
+                end
+            end
+        end
+    end
+    return handled
+end
+
+
+-- Called when mouse button was released
+function onMouseUp(x, y, button, layer)
+    if pressedComponentPath then
+        local res = runPressedHandler(pressedComponentPath, "onMouseUp", 
+                x, y, button)
+        pressedButton = 0
+        setPressedPath(nil)
+        return res
+    else
+        return runTopHandler(layer, "onMouseUp", x, y, button)
+    end
+end
+
+-- Called when mouse click event was processed
+function onMouseClick(x, y, button, layer)
+    if pressedComponentPath then
+        setCursor(x, y, cursor.shape, layer)
+        return runPressedHandler(pressedComponentPath, "onMouseClick", 
+                x, y, button)
+    else
+        pressedButton = button
+        local handled, path = runTopHandler(layer, "onMouseClick", x, y, button)
+        if handled then
+            setPressedPath(path)
+        end
+        return handled
+    end
+end
+
+-- Called when mouse motion event was processed
+function onMouseMove(x, y, layer)
+    if pressedComponentPath then
+        setCursor(x, y, cursor.shape, layer)
+        local res = runPressedHandler(pressedComponentPath, "onMouseMove", 
+                x, y, pressedButton)
+        return res
+    else
+        local cursor = getTopCursorShape(layer, x, y)
+        setCursor(x, y, cursor, layer)
+        local res = runTopHandler(layer, "onMouseMove", x, y, pressedButton)
+        return res or cursor
+    end
+end
+
+
+-- move panel to top of screen
+function movePanelToTop(panel)
+    for i, v in pairs(popups.components) do
+        if v == panel then
+            table.remove(popups.components, i)
+            table.insert(popups.components, panel)
+            return
+        end
+    end
+end
+
+
+-- create popup movable resizable subpanel hidden by default
+function subpanel(tbl)
+    local c = createComponent('subpanel', popups)
+    set(c.position, tbl.position)
+    c.size = { tbl.position[3], tbl.position[4] }
+    c.onMouseClick = function (comp, x, y, button, parentX, parentY)
+        defaultOnMouseClick(comp, x, y, button, parentX, parentY)
+        return true
+    end
+    c.onMouseDown = function (comp, x, y, button, parentX, parentY)
+        defaultOnMouseDown(comp, x, y, button, parentX, parentY)
+        return true
+    end
+    c.onMouseMove = function (comp, x, y, button, parentX, parentY)
+        defaultOnMouseMove(comp, x, y, button, parentX, parentY)
+        return true
+    end
+    set(c.visible, false)
+    set(c.movable, true)
+    c.cursor = { x = 0; y = 0; shape = loadImage("none.png") }
+    c.components = tbl.components
+
+    startComponentsCreation(tbl)
+    if not get(tbl.noBackground) then
+        if not rectangle then
+            rectangle = loadComponent('rectangle')
+        end
+    
+        table.insert(c.components, 1,
+            rectangle { position = { 0, 0, c.size[1], c.size[2] } } )
+    end
+
+    if not get(tbl.noClose) then
+        local pos = get(c.position)
+        local btnWidth = c.size[1] / pos[3] * 16
+        local btnHeight = c.size[2] / pos[4] * 16
+
+        if not button then
+            button = loadComponent('button')
+        end
+
+        c.component('closeButton', button { 
+            position = { c.size[1] - btnWidth, c.size[2] - btnHeight, 
+                btnWidth, btnHeight };
+            image = loadImage('close.png');
+            onMouseClick = function()
+                set(c.visible, false)
+                return true
+            end;
+        })
+    end
+
+    if not get(tbl.noResize) then
+        set(c.resizeble, true)
+        local pos = get(c.position)
+        c.resizeWidth = c.size[1] / pos[3] * 10
+        c.resizeHeight = c.size[2] / pos[4] * 10
+        
+        if not rectangle then
+            rectangle = loadComponent('rectangle')
+        end
+        
+        c.resizeRect = { c.size[1] - c.resizeWidth, 0, 
+                c.resizeWidth, c.resizeHeight };
+
+        c.component('resizeButton', rectangle { 
+            position = c.resizeRect;
+            color = { 0.10, 0.10, 0.10, 1.0 };
+        });
+        
+        if not clickable then
+            clickable = loadComponent('clickable')
+        end
+
+        c.component('resizeClickable', clickable {
+            position = c.resizeRect;
+            cursor = { 
+                x = 8, 
+                y = 26, 
+                width = 16, 
+                height = 16, 
+                shape = loadImage("clickable.png")
+            }
+        });
+    end
+    finishComponentsCreation()
+
+    if get(tbl.command) then
+        -- register navigator panel popup command
+        local command = createCommand(get(tbl.command), get(tbl.description))
+
+        -- navigator command handler
+        function commandHandler(phase)
+            if 0 == phase then
+                set(c.visible, not get(c.visible))
+                if get(c.visible) then
+                    movePanelToTop(c)
+                end
+            end
+            return 0
+        end
+
+
+        -- register created commandhandler
+        registerCommandHandler(command, 0, commandHandler)
+    end
+
+    popup(c)
+
+    return c
+end
+
+-- call 'onAvionicsDone' function
+function doneComponent(component)
+    local handler = rawget(component, 'onAvionicsDone')
+    if handler then
+        return handler()
+    end
+    for i = #component.components, 1, -1 do
+        doneComponent(component.components[i])
+    end
+end
+
+-- called when avionics about to unload
+function doneAvionics()
+    doneComponent(popups)
+    doneComponent(panel)
+end
+
+
+-- traverse visible focused components and call specified function
+function traverseFocused(char, key, func)
+    if focusedComponentPath then
+        local maxVisible = 0
+        for i = 1, #focusedComponentPath, 1 do
+            local c = focusedComponentPath[i]
+            if get(c.visible) then
+                maxVisible = i
+            else
+                break;
+            end
+        end
+        for i = maxVisible, 1, -1 do
+            local c = focusedComponentPath[i]
+            local res = c[func](c, char, key)
+            if res then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- called when button pressed
+function onKeyDown(char, key)
+    return traverseFocused(char, key, 'onKeyDown')
+end
+
+-- called when button released
+function onKeyUp(char, key)
+    return traverseFocused(char, key, 'onKeyUp')
+end
+
+
+-- load script inside component environment
+function include(component, name)
+    print("including", name)
+
+    local f, subdir = openFile(name)
+    if not f then
+        print("can't include script", name)
+    else
+        if subdir then
+            addSearchPath(subdir)
+        end
+            
+        setfenv(f, component)
+        f()
+
+        if subdir then
+            popSearchPath()
+        end
+    end
+end
+
+-- load sample from file
+-- find file using the same rules as for textures
+function loadSample(fileName)
+    for _, v in ipairs(searchImagePath) do
+        local f = v .. '/' .. fileName
+        if isFileExists(f) then
+            return loadSampleFromFile(f)
+        end
+    end
+
+    if not isFileExists(fileName) then
+        print("Can't find sound", fileName)
+    end
+
+    local s = loadSampleFromFile(fileName)
+    if 0 == s then
+        print("Can't load sound", fileName)
+    end
+    return s
+end
+
